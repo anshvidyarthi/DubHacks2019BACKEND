@@ -41,10 +41,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.security.GeneralSecurityException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 @SpringBootApplication
 @RestController
@@ -62,8 +59,8 @@ public class SpringbootApplication {
   }
 
   @GetMapping("/")
-  @RequestMapping(method = RequestMethod.GET, value = "/{name}/{duration}")
-  public String hello(@PathVariable String name, @PathVariable long duration) throws IOException, GeneralSecurityException {
+  @RequestMapping(method = RequestMethod.GET, value = "/{name}/{duration}/{recurring}")
+  public String hello(@PathVariable String name, @PathVariable long duration, @PathVariable boolean recurring) throws IOException, GeneralSecurityException {
     // Build a new authorized API client service.
     final NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
     Calendar service = new Calendar.Builder(HTTP_TRANSPORT, JSON_FACTORY, getCredentials(HTTP_TRANSPORT))
@@ -73,17 +70,41 @@ public class SpringbootApplication {
     // Get list of times when we are busy
     DateTime now = new DateTime(System.currentTimeMillis() + 3600000);
     DateTime weekFromNow = new DateTime(System.currentTimeMillis() + 3600000 + 604800000);
+    insertEvent(service, now, weekFromNow, name, duration);
+
+    if (recurring) {
+      for (int i = 1; i <= 6; i++) {
+        java.util.Calendar cal = new GregorianCalendar();
+        cal.setTime(new Date());
+        cal.set(java.util.Calendar.DAY_OF_YEAR, cal.get(java.util.Calendar.DAY_OF_YEAR) + i);
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0);
+        cal.set(java.util.Calendar.MINUTE, 0);
+        cal.set(java.util.Calendar.SECOND, 0);
+        cal.set(java.util.Calendar.MILLISECOND, 0);
+        Date midnight = cal.getTime();
+        DateTime actualMidnight = new DateTime(midnight.getTime());
+        insertEvent(service, actualMidnight, weekFromNow, name, duration);
+      }
+    }
+    return "Success";
+  }
+
+  private void insertEvent(Calendar service, DateTime startTime, DateTime endTime, String name, long duration) throws IOException, GeneralSecurityException{
+    // Get list of times when we are busy
     FreeBusyRequestItem item = new FreeBusyRequestItem().setId(service.calendars().get("primary").getCalendarId());
     ArrayList<FreeBusyRequestItem> bullshitList = new ArrayList<>();
     bullshitList.add(item);
     FreeBusyRequest request = new FreeBusyRequest();
-    request.setTimeMin(now);
-    request.setTimeMax(weekFromNow);
+    request.setTimeMin(startTime);
+    request.setTimeMax(endTime);
     request.setItems(bullshitList);
     FreeBusyCalendar freeBusyCalendar = service.freebusy().query(request).execute().getCalendars().get("primary");
 
     // insert an event
-    List<TimePeriod> freeTimes = getFreeTimes(freeBusyCalendar.getBusy());
+    List<TimePeriod> busyTimes = freeBusyCalendar.getBusy();
+    removeSleepTimes(busyTimes, startTime);
+    Collections.sort(busyTimes, (a, b) -> (a.getStart().getValue() < (b.getStart().getValue())) ? -1 : 1);
+    List<TimePeriod> freeTimes = getFreeTimes(busyTimes, startTime);
 
     boolean found = false;
     for (int i = 0; i < freeTimes.size() && !found; i++) {
@@ -105,34 +126,14 @@ public class SpringbootApplication {
         found = true;
       }
     }
-
-    return Arrays.toString(getFreeTimes(freeBusyCalendar.getBusy()).toArray());
-//    Events events = service.events().list("primary")
-//            .setMaxResults(10)
-//            .setTimeMin(now)
-//            .setOrderBy("startTime")
-//            .setSingleEvents(true)
-//            .execute();
-//    List<Event> items = events.getItems();
-//    if (items.isEmpty()) {
-//      return ("No upcoming events found.");
-//    } else {
-//      return "Found events";
-//      System.out.println("Upcoming events");
-//      for (Event event : items) {
-//        DateTime start = event.getStart().getDateTime();
-//        if (start == null) {
-//          start = event.getStart().getDate();
-//        }
-//        System.out.printf("%s (%s)\n", event.getSummary(), start);
-//      }
   }
 
-  private List<TimePeriod> getFreeTimes(List<TimePeriod> busyTimes) {
+  private List<TimePeriod> getFreeTimes(List<TimePeriod> busyTimes, DateTime startTime) {
     List<TimePeriod> freeTimes = new ArrayList<>();
-    TimePeriod start = new TimePeriod().setStart(new DateTime(System.currentTimeMillis() + 3600000));
+
+    TimePeriod start = new TimePeriod().setStart(startTime);
     if (busyTimes.isEmpty()) {
-      start.setEnd(new DateTime(System.currentTimeMillis() + 604800000 + 3600000));
+      start.setEnd(new DateTime(startTime.getValue() + 604800000 + 3600000));
       freeTimes.add(start);
     } else {
       start.setEnd(busyTimes.get(0).getStart());
@@ -147,7 +148,7 @@ public class SpringbootApplication {
       }
 
       TimePeriod last = new TimePeriod().setStart(busyTimes.get(busyTimes.size() - 1).getEnd())
-              .setEnd(new DateTime(System.currentTimeMillis() + 604800000 + 3600000));
+              .setEnd(new DateTime(startTime.getValue() + 604800000 + 3600000));
 
       freeTimes.add(last);
     }
@@ -178,6 +179,48 @@ public class SpringbootApplication {
     LocalServerReceiver receiver = new LocalServerReceiver.Builder().setPort(8888).build();
 
     return new AuthorizationCodeInstalledApp(flow, receiver).authorize("user");
+  }
+
+  private void removeSleepTimes(List<TimePeriod> busyTimes, DateTime start) {
+    DateTime currentTime = start;
+
+    java.util.Calendar calEnd1 = new GregorianCalendar();
+    calEnd1.setTime(new Date(start.getValue()));
+    calEnd1.set(java.util.Calendar.DAY_OF_YEAR, calEnd1.get(java.util.Calendar.DAY_OF_YEAR));
+    calEnd1.set(java.util.Calendar.HOUR_OF_DAY, 8);
+    calEnd1.set(java.util.Calendar.MINUTE, 0);
+    calEnd1.set(java.util.Calendar.SECOND, 0);
+    calEnd1.set(java.util.Calendar.MILLISECOND, 0);
+    Date eightTonight1 = calEnd1.getTime();
+    DateTime actualEight1 = new DateTime(eightTonight1.getTime());
+
+    TimePeriod sleepTime1 = new TimePeriod().setStart(currentTime).setEnd(actualEight1);
+    busyTimes.add(sleepTime1);
+
+    for (int i = 1; i <= 6; i++) {
+      java.util.Calendar calStart = new GregorianCalendar();
+      calStart.setTime(new Date(start.getValue()));
+      calStart.set(java.util.Calendar.DAY_OF_YEAR, calStart.get(java.util.Calendar.DAY_OF_YEAR) + i);
+      calStart.set(java.util.Calendar.HOUR_OF_DAY, 0);
+      calStart.set(java.util.Calendar.MINUTE, 0);
+      calStart.set(java.util.Calendar.SECOND, 0);
+      calStart.set(java.util.Calendar.MILLISECOND, 0);
+      Date midnightTonight = calStart.getTime();
+      DateTime actualMidnight = new DateTime(midnightTonight.getTime());
+
+      java.util.Calendar calEnd = new GregorianCalendar();
+      calEnd.setTime(new Date(start.getValue()));
+      calEnd.set(java.util.Calendar.DAY_OF_YEAR, calEnd.get(java.util.Calendar.DAY_OF_YEAR) + i);
+      calEnd.set(java.util.Calendar.HOUR_OF_DAY, 8);
+      calEnd.set(java.util.Calendar.MINUTE, 0);
+      calEnd.set(java.util.Calendar.SECOND, 0);
+      calEnd.set(java.util.Calendar.MILLISECOND, 0);
+      Date eightTonight = calEnd.getTime();
+      DateTime actualEight = new DateTime(eightTonight.getTime());
+
+      TimePeriod sleepTime = new TimePeriod().setStart(actualMidnight).setEnd(actualEight);
+      busyTimes.add(sleepTime);
+    }
   }
 }
 // [END gae_java11_helloworld]
