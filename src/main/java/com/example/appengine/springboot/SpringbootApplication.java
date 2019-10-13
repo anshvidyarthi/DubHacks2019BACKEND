@@ -30,8 +30,7 @@ import com.google.api.client.util.DateTime;
 import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.services.calendar.Calendar;
 import com.google.api.services.calendar.CalendarScopes;
-import com.google.api.services.calendar.model.Event;
-import com.google.api.services.calendar.model.Events;
+import com.google.api.services.calendar.model.*;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -43,6 +42,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.security.GeneralSecurityException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -53,7 +54,7 @@ public class SpringbootApplication {
   private static final String APPLICATION_NAME = "Google Calendar API Java Quickstart";
   private static final JsonFactory JSON_FACTORY = JacksonFactory.getDefaultInstance();
   private static final String TOKENS_DIRECTORY_PATH = "tokens";
-  private static final List<String> SCOPES = Collections.singletonList(CalendarScopes.CALENDAR_READONLY);
+  private static final List<String> SCOPES = Collections.singletonList(CalendarScopes.CALENDAR);
   private static final String CREDENTIALS_FILE_PATH = "/credentials.json";
 
 
@@ -69,19 +70,53 @@ public class SpringbootApplication {
             .setApplicationName(APPLICATION_NAME)
             .build();
 
-    // List the next 10 events from the primary calendar.
+    // Get list of times when we are busy
     DateTime now = new DateTime(System.currentTimeMillis());
-    Events events = service.events().list("primary")
-            .setMaxResults(10)
-            .setTimeMin(now)
-            .setOrderBy("startTime")
-            .setSingleEvents(true)
-            .execute();
-    List<Event> items = events.getItems();
-    if (items.isEmpty()) {
-      return ("No upcoming events found.");
-    } else {
-      return "Found events";
+    DateTime weekFromNow = new DateTime(System.currentTimeMillis() + 604800000);
+    FreeBusyRequestItem item = new FreeBusyRequestItem().setId(service.calendars().get("primary").getCalendarId());
+    ArrayList<FreeBusyRequestItem> bullshitList = new ArrayList<>();
+    bullshitList.add(item);
+    FreeBusyRequest request = new FreeBusyRequest();
+    request.setTimeMin(now);
+    request.setTimeMax(weekFromNow);
+    request.setItems(bullshitList);
+    FreeBusyCalendar freeBusyCalendar = service.freebusy().query(request).execute().getCalendars().get("primary");
+
+    // insert an event
+    List<TimePeriod> freeTimes = getFreeTimes(freeBusyCalendar.getBusy());
+    long duration = 1000 * 60 * 60;
+
+    for (int i = 0; i < freeTimes.size(); i++) {
+      long freeTimeDuration = freeTimes.get(i).getEnd().getValue() - freeTimes.get(i).getStart().getValue();
+      if (freeTimeDuration >= duration) {
+        Event event = new Event().setSummary("DubHacks 2019");
+        DateTime eventStart = freeTimes.get(i).getStart();
+        DateTime eventEnd = new DateTime(eventStart.getValue() + duration);
+        EventDateTime eventDateTimeStart = new EventDateTime()
+                .setDateTime(eventStart)
+                .setTimeZone("America/Los_Angeles");
+        EventDateTime eventDateTimeEnd = new EventDateTime()
+                .setDateTime(eventEnd)
+                .setTimeZone("America/Los_Angeles");
+
+        event.setStart(eventDateTimeStart);
+        event.setEnd(eventDateTimeEnd);
+        service.events().insert("primary", event).execute();
+      }
+    }
+
+    return Arrays.toString(getFreeTimes(freeBusyCalendar.getBusy()).toArray());
+//    Events events = service.events().list("primary")
+//            .setMaxResults(10)
+//            .setTimeMin(now)
+//            .setOrderBy("startTime")
+//            .setSingleEvents(true)
+//            .execute();
+//    List<Event> items = events.getItems();
+//    if (items.isEmpty()) {
+//      return ("No upcoming events found.");
+//    } else {
+//      return "Found events";
 //      System.out.println("Upcoming events");
 //      for (Event event : items) {
 //        DateTime start = event.getStart().getDateTime();
@@ -90,7 +125,36 @@ public class SpringbootApplication {
 //        }
 //        System.out.printf("%s (%s)\n", event.getSummary(), start);
 //      }
+  }
+
+  private void insertEvent(Event event, List<TimePeriod> freeTimes, Calendar service){
+
+  }
+  private List<TimePeriod> getFreeTimes(List<TimePeriod> busyTimes) {
+    List<TimePeriod> freeTimes = new ArrayList<>();
+    TimePeriod start = new TimePeriod().setStart(new DateTime(System.currentTimeMillis()));
+    if (busyTimes.isEmpty()) {
+      start.setEnd(new DateTime(System.currentTimeMillis() + 604800000));
+      freeTimes.add(start);
+    } else {
+      start.setEnd(busyTimes.get(0).getStart());
+      freeTimes.add(start);
+
+      if (busyTimes.size() > 1) {
+        for (int i = 1; i < busyTimes.size() - 1; i++) {
+          TimePeriod freeTime = new TimePeriod().setStart(busyTimes.get(i - 1).getEnd())
+                  .setEnd(busyTimes.get(i).getStart());
+          freeTimes.add(freeTime);
+        }
+      }
+
+      TimePeriod last = new TimePeriod().setStart(busyTimes.get(busyTimes.size() - 1).getEnd())
+              .setEnd(new DateTime(System.currentTimeMillis() + 604800000));
+
+      freeTimes.add(last);
     }
+
+    return freeTimes;
   }
 
   /**
