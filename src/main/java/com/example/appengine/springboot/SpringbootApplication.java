@@ -85,7 +85,8 @@ public class SpringbootApplication {
     // insert an event
     List<TimePeriod> freeTimes = getFreeTimes(freeBusyCalendar.getBusy());
 
-    for (int i = 0; i < freeTimes.size(); i++) {
+    boolean found = false;
+    for (int i = 0; i < freeTimes.size() && !found; i++) {
       long freeTimeDuration = freeTimes.get(i).getEnd().getValue() - freeTimes.get(i).getStart().getValue();
       if (freeTimeDuration >= duration) {
         Event event = new Event().setSummary(name);
@@ -101,6 +102,7 @@ public class SpringbootApplication {
         event.setStart(eventDateTimeStart);
         event.setEnd(eventDateTimeEnd);
         service.events().insert("primary", event).execute();
+        found = true;
       }
     }
 
@@ -140,7 +142,7 @@ public class SpringbootApplication {
       freeTimes.add(start);
 
       if (busyTimes.size() > 1) {
-        for (int i = 1; i < busyTimes.size() - 1; i++) {
+        for (int i = 1; i < busyTimes.size(); i++) {
           TimePeriod freeTime = new TimePeriod().setStart(busyTimes.get(i - 1).getEnd())
                   .setEnd(busyTimes.get(i).getStart());
           freeTimes.add(freeTime);
