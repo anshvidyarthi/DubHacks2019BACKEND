@@ -102,6 +102,20 @@ public class SpringbootApplication {
 
     // insert an event
     List<TimePeriod> busyTimes = freeBusyCalendar.getBusy();
+
+    /// compare with friends calendar if "Hang out"
+    if (name.equals("Hang out")) {
+      FreeBusyRequestItem item2 = new FreeBusyRequestItem().setId("cs.washington.edu_hmsh3vtlv76ej4ba1araipv3sg@group.calendar.google.com");
+      ArrayList<FreeBusyRequestItem> bullshitList2 = new ArrayList<>();
+      bullshitList2.add(item2);
+      FreeBusyRequest request2 = new FreeBusyRequest();
+      request2.setTimeMin(startTime);
+      request2.setTimeMax(endTime);
+      request2.setItems(bullshitList2);
+      FreeBusyCalendar freeBusyCalendar2 = service.freebusy().query(request2).execute().getCalendars().get("cs.washington.edu_hmsh3vtlv76ej4ba1araipv3sg@group.calendar.google.com");
+      busyTimes.addAll(freeBusyCalendar2.getBusy());
+    }
+
     removeSleepTimes(busyTimes, startTime);
     Collections.sort(busyTimes, (a, b) -> (a.getStart().getValue() < (b.getStart().getValue())) ? -1 : 1);
     List<TimePeriod> freeTimes = getFreeTimes(busyTimes, startTime);
@@ -123,6 +137,12 @@ public class SpringbootApplication {
         event.setStart(eventDateTimeStart);
         event.setEnd(eventDateTimeEnd);
         service.events().insert("primary", event).execute();
+
+        // add to friend's calendar if applicable
+        if (name.equals("Hang out")) {
+          service.events().insert("cs.washington.edu_hmsh3vtlv76ej4ba1araipv3sg@group.calendar.google.com", event).execute();
+        }
+
         found = true;
       }
     }
