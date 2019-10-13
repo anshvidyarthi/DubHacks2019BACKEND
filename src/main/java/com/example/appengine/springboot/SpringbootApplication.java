@@ -71,8 +71,8 @@ public class SpringbootApplication {
             .build();
 
     // Get list of times when we are busy
-    DateTime now = new DateTime(System.currentTimeMillis());
-    DateTime weekFromNow = new DateTime(System.currentTimeMillis() + 604800000);
+    DateTime now = new DateTime(System.currentTimeMillis() + 3600000);
+    DateTime weekFromNow = new DateTime(System.currentTimeMillis() + 3600000 + 604800000);
     FreeBusyRequestItem item = new FreeBusyRequestItem().setId(service.calendars().get("primary").getCalendarId());
     ArrayList<FreeBusyRequestItem> bullshitList = new ArrayList<>();
     bullshitList.add(item);
@@ -128,14 +128,11 @@ public class SpringbootApplication {
 //      }
   }
 
-  private void insertEvent(Event event, List<TimePeriod> freeTimes, Calendar service){
-
-  }
   private List<TimePeriod> getFreeTimes(List<TimePeriod> busyTimes) {
     List<TimePeriod> freeTimes = new ArrayList<>();
-    TimePeriod start = new TimePeriod().setStart(new DateTime(System.currentTimeMillis()));
+    TimePeriod start = new TimePeriod().setStart(new DateTime(System.currentTimeMillis() + 3600000));
     if (busyTimes.isEmpty()) {
-      start.setEnd(new DateTime(System.currentTimeMillis() + 604800000));
+      start.setEnd(new DateTime(System.currentTimeMillis() + 604800000 + 3600000));
       freeTimes.add(start);
     } else {
       start.setEnd(busyTimes.get(0).getStart());
@@ -150,7 +147,7 @@ public class SpringbootApplication {
       }
 
       TimePeriod last = new TimePeriod().setStart(busyTimes.get(busyTimes.size() - 1).getEnd())
-              .setEnd(new DateTime(System.currentTimeMillis() + 604800000));
+              .setEnd(new DateTime(System.currentTimeMillis() + 604800000 + 3600000));
 
       freeTimes.add(last);
     }
@@ -179,9 +176,8 @@ public class SpringbootApplication {
             .setAccessType("offline")
             .build();
     LocalServerReceiver receiver = new LocalServerReceiver.Builder().setPort(8888).build();
+
     return new AuthorizationCodeInstalledApp(flow, receiver).authorize("user");
   }
-
-
 }
 // [END gae_java11_helloworld]
