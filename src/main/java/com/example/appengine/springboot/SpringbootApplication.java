@@ -33,8 +33,7 @@ import com.google.api.services.calendar.CalendarScopes;
 import com.google.api.services.calendar.model.*;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 
 import java.io.FileNotFoundException;
@@ -63,7 +62,8 @@ public class SpringbootApplication {
   }
 
   @GetMapping("/")
-  public String hello() throws IOException, GeneralSecurityException {
+  @RequestMapping(method = RequestMethod.GET, value = "/{name}/{duration}")
+  public String hello(@PathVariable String name, @PathVariable long duration) throws IOException, GeneralSecurityException {
     // Build a new authorized API client service.
     final NetHttpTransport HTTP_TRANSPORT = GoogleNetHttpTransport.newTrustedTransport();
     Calendar service = new Calendar.Builder(HTTP_TRANSPORT, JSON_FACTORY, getCredentials(HTTP_TRANSPORT))
@@ -84,12 +84,11 @@ public class SpringbootApplication {
 
     // insert an event
     List<TimePeriod> freeTimes = getFreeTimes(freeBusyCalendar.getBusy());
-    long duration = 1000 * 60 * 60;
 
     for (int i = 0; i < freeTimes.size(); i++) {
       long freeTimeDuration = freeTimes.get(i).getEnd().getValue() - freeTimes.get(i).getStart().getValue();
       if (freeTimeDuration >= duration) {
-        Event event = new Event().setSummary("DubHacks 2019");
+        Event event = new Event().setSummary(name);
         DateTime eventStart = freeTimes.get(i).getStart();
         DateTime eventEnd = new DateTime(eventStart.getValue() + duration);
         EventDateTime eventDateTimeStart = new EventDateTime()
