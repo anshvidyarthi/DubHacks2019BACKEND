@@ -194,7 +194,12 @@ public class SpringbootApplication {
     Date eightTonight1 = calEnd1.getTime();
     DateTime actualEight1 = new DateTime(eightTonight1.getTime());
 
-    TimePeriod sleepTime1 = new TimePeriod().setStart(currentTime).setEnd(actualEight1);
+    TimePeriod sleepTime1;
+    if (start.getValue() <= actualEight1.getValue()) {
+      sleepTime1 = new TimePeriod().setStart(currentTime).setEnd(actualEight1);
+    } else {
+      sleepTime1 = new TimePeriod().setStart(actualEight1).setEnd(currentTime);
+    }
     busyTimes.add(sleepTime1);
 
     for (int i = 1; i <= 6; i++) {
